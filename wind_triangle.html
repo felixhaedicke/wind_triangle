@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<!--
+    Wind Triangle
+    Copyright (C) 2026 Felix Hädicke
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as
+    published by the Free Software Foundation, either version 3 of the
+    License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wind Triangle</title>
+    <style>
+        :root {
+            --primary: #0056b3;
+            --secondary: #28a745;
+            --accent: #d9534f;
+            --bg: #f8f9fa;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .main-wrapper {
+            max-width: 1000px;
+            width: 100%;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            box-sizing: border-box;
+        }
+
+        h2 { text-align: center; margin-bottom: 25px; font-weight: 300; color: #222; }
+
+        .app-grid { display: flex; flex-direction: column; gap: 30px; }
+
+        @media (min-width: 768px) {
+            .app-grid { flex-direction: row; align-items: flex-start; }
+        }
+
+        /* Ensure input fields have identical width */
+        .controls-pane { 
+            flex: 1; 
+            display: grid; 
+            grid-template-columns: repeat(2, minmax(0, 1fr)); 
+            gap: 15px; 
+        }
+
+        .input-group { display: flex; flex-direction: column; }
+
+        label {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        input, select {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            background: #fff;
+            width: 100%;
+            /* Essential for precise width calculation */
+            box-sizing: border-box; 
+        }
+
+        .visual-pane { flex: 1.2; display: flex; flex-direction: column; align-items: center; min-height: 300px; }
+        .canvas-container { width: 100%; max-width: 450px; aspect-ratio: 1 / 1; position: relative; }
+        canvas { width: 100%; height: 100%; background: #fff; border: 1px solid #eee; border-radius: 8px; }
+
+        .results-box {
+            grid-column: span 2;
+            margin-top: 10px;
+            padding: 15px;
+            background: #f1f3f5;
+            border-left: 4px solid #333;
+            border-radius: 4px;
+            min-height: 60px;
+            line-height: 1.5;
+        }
+
+        .legend { display: flex; gap: 15px; margin-top: 15px; font-size: 0.8rem; flex-wrap: wrap; justify-content: center; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 10px; height: 10px; border-radius: 2px; }
+        .placeholder-text { color: #aaa; text-align: center; padding-top: 20px; font-style: italic; display: block; }
+    </style>
+</head>
+<body>
+
+<div class="main-wrapper">
+    <h2 id="ui-title">Wind Triangle</h2>
+    
+    <div class="app-grid">
+        <div class="controls-pane">
+            <div class="input-group">
+                <label id="lbl-track">Track (°)</label>
+                <input type="number" id="track" value="0" min="0" max="360">
+            </div>
+            <div class="input-group">
+                <label id="lbl-tas">Speed (TAS)</label>
+                <input type="number" id="tas" value="0" min="0">
+            </div>
+            <div class="input-group">
+                <label id="lbl-windDir">Wind From (°)</label>
+                <input type="number" id="windDir" value="0" min="0" max="360">
+            </div>
+            <div class="input-group">
+                <label id="lbl-windSpeed">Wind Speed</label>
+                <input type="number" id="windSpeed" value="0" min="0">
+            </div>
+            <div class="input-group" style="grid-column: span 2;">
+                <label id="lbl-unit">Unit</label>
+                <select id="unit">
+                    <option id="opt-kt" value="kt">Knots (kt)</option>
+                    <option value="km/h">km/h</option>
+                    <option value="m/s">m/s</option>
+                </select>
+            </div>
+
+            <div class="results-box" id="results"></div>
+        </div>
+
+        <div class="visual-pane">
+            <div class="canvas-container" id="canvas-cont">
+                <canvas id="navCanvas" width="500" height="500"></canvas>
+            </div>
+            <div class="legend" id="legend-box" style="display:none;">
+                <div class="legend-item"><span class="dot" style="background:var(--primary)"></span> <span id="leg-hdg">Steuerkursvektor (1)</span></div>
+                <div class="legend-item" id="leg-trk-container"><span class="dot" style="background:var(--secondary)"></span> <span id="leg-trk">Grundvektor (2)</span></div>
+                <div class="legend-item"><span class="dot" style="background:var(--accent)"></span> <span id="leg-wind">Windvektor (3)</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('navCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const i18n = {
+        de: {
+            pageTitle: "Winddreieck",
+            title: "Winddreieck-Rechner",
+            track: "Kurs (°)",
+            tas: "Geschwindigkeit (TAS)",
+            windDir: "Wind aus (°)",
+            windSpeed: "Windstärke",
+            unit: "Einheit",
+            unitKt: "Knoten (kt)",
+            hdgLeg: "Steuerkursvektor (1)",
+            trkLeg: "Grundvektor (2)",
+            windLeg: "Windvektor (3)",
+            placeholder: "Bitte Geschwindigkeit (TAS) und Windstärke > 0 eingeben",
+            error: "Wind zu stark für diese Geschwindigkeit!",
+            wcaLabel: "Luvwinkel",
+            hdgLabel: "Steuerkurs",
+            gsLabel: "GS"
+        },
+        en: {
+            pageTitle: "Wind Triangle",
+            title: "Wind Triangle Calculator",
+            track: "Track (°)",
+            tas: "Speed (TAS)",
+            windDir: "Wind From (°)",
+            windSpeed: "Wind Speed",
+            unit: "Unit",
+            unitKt: "Knots (kt)",
+            hdgLeg: "Heading Vector (1)",
+            trkLeg: "Track Vector (2)",
+            windLeg: "Wind Vector (3)",
+            placeholder: "Enter Speed (TAS) and Wind Speed > 0 to start",
+            error: "Wind too strong!",
+            wcaLabel: "WCA",
+            hdgLabel: "Heading",
+            gsLabel: "GS"
+        }
+    };
+
+    const lang = navigator.language.startsWith('de') ? 'de' : 'en';
+    const t = i18n[lang];
+
+    function initUI() {
+        document.title = t.pageTitle; // Set browser tab title
+        document.getElementById('ui-title').innerText = t.title;
+        document.getElementById('lbl-track').innerText = t.track;
+        document.getElementById('lbl-tas').innerText = t.tas;
+        document.getElementById('lbl-windDir').innerText = t.windDir;
+        document.getElementById('lbl-windSpeed').innerText = t.windSpeed;
+        document.getElementById('lbl-unit').innerText = t.unit;
+        document.getElementById('opt-kt').innerText = t.unitKt;
+        document.getElementById('leg-hdg').innerText = t.hdgLeg;
+        document.getElementById('leg-trk').innerText = t.trkLeg;
+        document.getElementById('leg-wind').innerText = t.windLeg;
+        document.getElementById('results').innerHTML = `<span class="placeholder-text">${t.placeholder}</span>`;
+    }
+
+    const toRad = (deg) => deg * Math.PI / 180;
+    const toDeg = (rad) => rad * 180 / Math.PI;
+
+    function calculateAndDraw() {
+        const trk = parseFloat(document.getElementById('track').value) || 0;
+        const tas = parseFloat(document.getElementById('tas').value) || 0;
+        const wFromDir = parseFloat(document.getElementById('windDir').value) || 0;
+        const wSpd = parseFloat(document.getElementById('windSpeed').value) || 0;
+        const unit = document.getElementById('unit').value;
+
+        if (tas <= 0 || wSpd <= 0) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('results').innerHTML = `<span class="placeholder-text">${t.placeholder}</span>`;
+            document.getElementById('legend-box').style.display = 'none';
+            return;
+        }
+
+        document.getElementById('legend-box').style.display = 'flex';
+        const windFromRad = toRad(wFromDir);
+        const trackRad = toRad(trk);
+        const relAngle = windFromRad - trackRad;
+        
+        // Use Law of Sines for WCA
+        let ratio = (wSpd * Math.sin(relAngle)) / tas;
+        ratio = Math.max(-1, Math.min(1, ratio)); // Handle edge cases for asin
+        
+        let wcaRad = Math.asin(ratio);
+        
+        if (isNaN(wcaRad)) {
+            document.getElementById('results').innerHTML = `<b style="color:red">${t.error}</b>`;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            return;
+        }
+
+        const wcaDeg = dares = toDeg(wcaRad);
+        const heading = (trk + wcaDeg + 360) % 360;
+        const gs = tas * Math.cos(wcaRad) - wSpd * Math.cos(relAngle);
+
+        document.getElementById('results').innerHTML = `
+            <b>${t.wcaLabel}:</b> ${wcaDeg.toFixed(1)}°<br>
+            <b>${t.hdgLabel}:</b> ${heading.toFixed(1)}°<br>
+            <b>${t.gsLabel}:</b> ${gs.toFixed(1)} ${unit}
+        `;
+
+        draw(trk, heading, wFromDir, wSpd, tas, gs);
+    }
+
+    function draw(trk, hdg, wDir, wSpd, tas, gs) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const scale = 180 / Math.max(tas, gs, wSpd + 20);
+
+        // Background grid
+        ctx.strokeStyle = "#f4f4f4";
+        ctx.lineWidth = 1;
+        for(let i=0; i<=500; i+=50) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 500); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(500, i); ctx.stroke();
+        }
+
+        // North reference line
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = "#ccc";
+        ctx.beginPath(); ctx.moveTo(centerX, 20); ctx.lineTo(centerX, 480); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Calculate vector points
+        const hdgRad = toRad(hdg - 90);
+        const tasX = centerX + Math.cos(hdgRad) * tas * scale;
+        const tasY = centerY + Math.sin(hdgRad) * tas * scale;
+
+        const wToRad = toRad(wDir + 180 - 90);
+        const windEndX = tasX + Math.cos(wToRad) * wSpd * scale;
+        const windEndY = tasY + Math.sin(wToRad) * wSpd * scale;
+
+        // Draw vectors
+        drawMultiArrow(centerX, centerY, tasX, tasY, '#0056b3', 1); // Heading vector
+        drawMultiArrow(tasX, tasY, windEndX, windEndY, '#d9534f', 3); // Wind vector
+        
+        // Only draw track vector if groundspeed is significant
+        const trkLeg = document.getElementById('leg-trk-container');
+        if (gs > 0.1) {
+            drawMultiArrow(centerX, centerY, windEndX, windEndY, '#28a745', 2); // Track vector
+            trkLeg.style.opacity = "1";
+        } else {
+            trkLeg.style.opacity = "0.3"; // Dim legend item if not visible
+        }
+    }
+
+    function drawMultiArrow(x1, y1, x2, y2, color, arrowCount) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) return;
+
+        const angle = Math.atan2(dy, dx);
+        const headlen = 12;
+        const spacing = 10;
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        
+        // Draw one or more arrowheads based on vector type
+        for (let i = 0; i < arrowCount; i++) {
+            const offset = i * spacing;
+            const tx = x2 - offset * Math.cos(angle);
+            const ty = y2 - offset * Math.sin(angle);
+            ctx.beginPath(); ctx.moveTo(tx, ty);
+            ctx.lineTo(tx - headlen * Math.cos(angle - Math.PI/6), ty - headlen * Math.sin(angle - Math.PI/6));
+            ctx.lineTo(tx - headlen * Math.cos(angle + Math.PI/6), ty - headlen * Math.sin(angle + Math.PI/6));
+            ctx.fill();
+        }
+    }
+
+    // Input listeners
+    document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', calculateAndDraw));
+
+    // Reload fix: execute after browser restores form values
+    window.addEventListener('load', () => {
+        initUI();
+        calculateAndDraw();
+    });
+</script>
+
+</body>
+</html>
