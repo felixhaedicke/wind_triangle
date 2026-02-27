@@ -205,7 +205,7 @@
     const t = i18n[lang];
 
     function initUI() {
-        document.title = t.pageTitle; // Set browser tab title
+        document.title = t.pageTitle;
         document.getElementById('ui-title').innerText = t.title;
         document.getElementById('lbl-track').innerText = t.track;
         document.getElementById('lbl-tas').innerText = t.tas;
@@ -241,9 +241,8 @@
         const trackRad = toRad(trk);
         const relAngle = windFromRad - trackRad;
         
-        // Use Law of Sines for WCA
         let ratio = (wSpd * Math.sin(relAngle)) / tas;
-        ratio = Math.max(-1, Math.min(1, ratio)); // Handle edge cases for asin
+        ratio = Math.max(-1, Math.min(1, ratio));
         
         let wcaRad = Math.asin(ratio);
         
@@ -253,7 +252,7 @@
             return;
         }
 
-        const wcaDeg = dares = toDeg(wcaRad);
+        const wcaDeg = toDeg(wcaRad);
         const heading = (trk + wcaDeg + 360) % 360;
         const gs = tas * Math.cos(wcaRad) - wSpd * Math.cos(relAngle);
 
@@ -270,6 +269,8 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
+        
+        // Dynamic scaling based on the largest vector
         const scale = 180 / Math.max(tas, gs, wSpd + 20);
 
         // Background grid
@@ -286,26 +287,32 @@
         ctx.beginPath(); ctx.moveTo(centerX, 20); ctx.lineTo(centerX, 480); ctx.stroke();
         ctx.setLineDash([]);
 
-        // Calculate vector points
-        const hdgRad = toRad(hdg - 90);
-        const tasX = centerX + Math.cos(hdgRad) * tas * scale;
-        const tasY = centerY + Math.sin(hdgRad) * tas * scale;
-
+        // 1. Wind Vector starts at center
         const wToRad = toRad(wDir + 180 - 90);
-        const windEndX = tasX + Math.cos(wToRad) * wSpd * scale;
-        const windEndY = tasY + Math.sin(wToRad) * wSpd * scale;
+        const windEndX = centerX + Math.cos(wToRad) * wSpd * scale;
+        const windEndY = centerY + Math.sin(wToRad) * wSpd * scale;
 
-        // Draw vectors
-        drawMultiArrow(centerX, centerY, tasX, tasY, '#0056b3', 1); // Heading vector
-        drawMultiArrow(tasX, tasY, windEndX, windEndY, '#d9534f', 3); // Wind vector
+        // 2. Heading Vector starts at tip of Wind Vector
+        const hdgRad = toRad(hdg - 90);
+        const tasEndX = windEndX + Math.cos(hdgRad) * tas * scale;
+        const tasEndY = windEndY + Math.sin(hdgRad) * tas * scale;
+
+        // 3. Track Vector connects center to the end of Heading Vector
+        // (This result is the same as the tip of the Ground Vector)
+
+        // Draw Wind Vector (starts center)
+        drawMultiArrow(centerX, centerY, windEndX, windEndY, '#d9534f', 3);
         
-        // Only draw track vector if groundspeed is significant
+        // Draw Heading Vector (starts at wind tip)
+        drawMultiArrow(windEndX, windEndY, tasEndX, tasEndY, '#0056b3', 1);
+        
+        // Draw Track Vector if GS > 0 (starts center)
         const trkLeg = document.getElementById('leg-trk-container');
         if (gs > 0.1) {
-            drawMultiArrow(centerX, centerY, windEndX, windEndY, '#28a745', 2); // Track vector
+            drawMultiArrow(centerX, centerY, tasEndX, tasEndY, '#28a745', 2);
             trkLeg.style.opacity = "1";
         } else {
-            trkLeg.style.opacity = "0.3"; // Dim legend item if not visible
+            trkLeg.style.opacity = "0.3";
         }
     }
 
@@ -322,7 +329,6 @@
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
         
-        // Draw one or more arrowheads based on vector type
         for (let i = 0; i < arrowCount; i++) {
             const offset = i * spacing;
             const tx = x2 - offset * Math.cos(angle);
@@ -334,10 +340,8 @@
         }
     }
 
-    // Input listeners
     document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', calculateAndDraw));
 
-    // Reload fix: execute after browser restores form values
     window.addEventListener('load', () => {
         initUI();
         calculateAndDraw();
