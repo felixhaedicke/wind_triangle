@@ -68,7 +68,6 @@
             }
         }
 
-        /* Ensure input fields have identical width */
         .controls-pane { 
             flex: 1; 
             display: grid; 
@@ -96,7 +95,6 @@
             font-size: 1rem;
             background: #fff;
             width: 100%;
-            /* Essential for precise width calculation */
             box-sizing: border-box; 
         }
 
@@ -105,7 +103,7 @@
             display: flex; 
             flex-direction: column; 
             align-items: center; 
-            min-width: 0; /* Prevents flex items from overflowing */
+            min-width: 0; 
         }
 
         .canvas-container { 
@@ -147,7 +145,6 @@
         .dot { width: 10px; height: 10px; border-radius: 2px; }
         .placeholder-text { color: #aaa; text-align: center; padding-top: 20px; font-style: italic; display: block; }
 
-        /* GitHub Link Styling */
         .github-footer {
             margin-top: 30px;
             padding-top: 15px;
@@ -306,7 +303,6 @@
         const trackRad = toRad(trk);
         const relAngle = windFromRad - trackRad;
         
-        // Calculate WCA
         let ratio = (wSpd * Math.sin(relAngle)) / tas;
         ratio = Math.max(-1, Math.min(1, ratio));
         
@@ -335,8 +331,6 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
-        
-        // Dynamic scaling based on the largest vector
         const scale = 180 / Math.max(tas, gs, wSpd + 20);
 
         // Background grid
@@ -353,7 +347,7 @@
         ctx.beginPath(); ctx.moveTo(centerX, 20); ctx.lineTo(centerX, 480); ctx.stroke();
         ctx.setLineDash([]);
 
-        // 1. Wind Vector starts at center (Wind from -> Vector pointing to)
+        // 1. Wind Vector starts at center
         const wToRad = toRad(wDir + 180 - 90);
         const windEndX = centerX + Math.cos(wToRad) * wSpd * scale;
         const windEndY = centerY + Math.sin(wToRad) * wSpd * scale;
@@ -363,13 +357,13 @@
         const tasEndX = windEndX + Math.cos(hdgRad) * tas * scale;
         const tasEndY = windEndY + Math.sin(hdgRad) * tas * scale;
 
-        // Draw Wind Vector (Red)
+        // Draw Wind Vector (Red, 3 arrowheads)
         drawMultiArrow(centerX, centerY, windEndX, windEndY, '#d9534f', 3);
         
-        // Draw Heading Vector (Blue)
+        // Draw Heading Vector (Blue, 1 arrowhead)
         drawMultiArrow(windEndX, windEndY, tasEndX, tasEndY, '#0056b3', 1);
         
-        // Draw Track Vector (Green) starting at center
+        // Draw Track Vector (Green, 2 arrowheads)
         const trkLeg = document.getElementById('leg-trk-container');
         if (gs > 0.1) {
             drawMultiArrow(centerX, centerY, tasEndX, tasEndY, '#28a745', 2);
